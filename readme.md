@@ -2,17 +2,26 @@
 
 
 options-pricer/
-├── CMakeLists.txt
+├── CMakeLists.txt              # [MODIFIED] Link against IBKR TwsApi library
+├── config/
+│   └── paper_config.json       # [NEW] Socket ports, contract symbols, risk limits
 ├── include/
-│   ├── OrderBook.hpp        # B-Tree or map-based limit order book state
-│   ├── BlackScholes.hpp     # The statistical math core (pricing & Greeks)
-│   ├── MarketData.hpp       # CSV parser and event generator
-│   └── Engine.hpp           # The main event loop bridging data and math
+│   ├── BlackScholes.hpp        # Unchanged (Pure math core)
+│   ├── OrderBook.hpp          # [MODIFIED] Support streaming bid/ask updates
+│   ├── MarketData.hpp          # [MODIFIED] Refactor into abstract IMarketDataProvider
+│   ├── IBMarketData.hpp        # [NEW] Real-time tick stream from IBKR
+│   ├── IBExecutionHandler.hpp  # [NEW] Inherits EWrapper/EClientSocket for API calls
+│   ├── RiskManager.hpp         # [NEW] Aggregates Net Delta/Gamma & enforces Kill Switches
+│   ├── LockFreeQueue.hpp       # [NEW] SPSC Queue to pass ticks from API to engine
+│   └── Engine.hpp              # [MODIFIED] Event loop consuming lock-free thread queue
 ├── src/
 │   ├── OrderBook.cpp
 │   ├── BlackScholes.cpp
 │   ├── MarketData.cpp
-│   ├── Engine.cpp
-│   └── main.cpp             # Entry point
+│   ├── IBMarketData.cpp        # [NEW] IBKR tick parser
+│   ├── IBExecutionHandler.cpp  # [NEW] EWrapper callback implementation
+│   ├── RiskManager.cpp         # [NEW] Hedging logic & fat-finger filters
+│   ├── Engine.cpp              # [MODIFIED] Multi-threaded processing loop
+│   └── main.cpp                # [MODIFIED] App entry point, signal handler, thread init
 └── data/
-    └── historical_ticks.csv # Your offline data feed
+    └── historical_ticks.csv    # Kept for offline regression testing
