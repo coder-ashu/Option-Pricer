@@ -1,6 +1,6 @@
 import random
 
-# A simple script to simulate a mean-reverting price walk
+# A simple script to simulate a mean-reverting price walk hello
 fair_value = 150.0
 with open("./historical_ticks.csv", "w") as f:
     f.write("timestamp,action,side,price,qty\n")
