@@ -1,22 +1,28 @@
 #ifndef BLACK_SCHOLES_HPP
 #define BLACK_SCHOLES_HPP
 
+struct Greeks {
+    double price;
+    double delta;
+    double gamma;
+    double vega;
+    double theta;
+};
+
 class BlackScholes {
 public:
-    // Calculates the theoretical price of a European Call Option
-    // S = Current Stock Price (We will feed this from our OrderBook)
-    // K = Strike Price of the Option
-    // T = Time to Expiry (in Years. e.g., 30 days = 30.0 / 365.0)
-    // r = Risk-Free Interest Rate (e.g., 0.05 for 5%)
-    // v = Implied Volatility (Sigma. e.g., 0.20 for 20%)
     static double calculateCallPrice(double S, double K, double T, double r, double v);
-
-    // Calculates the theoretical price of a European Put Option
     static double calculatePutPrice(double S, double K, double T, double r, double v);
 
-private:
-    // Standard Normal Cumulative Distribution Function (CDF)
-    // Black-Scholes requires N(d1) and N(d2). This function computes that.
+    // Single pass calculation of theoretical value and all core Greeks
+    static Greeks calculateCallGreeks(double S, double K, double T, double r, double v);
+    static Greeks calculatePutGreeks(double S, double K, double T, double r, double v);
+
+    // Fast Newton-Raphson implied volatility solver
+    static double impliedVolatilityCall(double marketPrice, double S, double K, double T, double r,
+                                       double initialVol = 0.20, double tol = 1e-5, int maxIter = 100);
+
+    static double norm_pdf(double x);
     static double norm_cdf(double x);
 };
 

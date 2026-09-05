@@ -3,45 +3,115 @@
 
 #include <map>
 #include <stdexcept>
-#include <iostream>
+#include <cmath>
 
 class OrderBook {
 private:
-    // Bids: Buyers want the lowest price, but the 'best' bid is the highest price.
-    // std::greater sorts highest to lowest.
     std::map<double, int, std::greater<double>> bids;
-    
-    // Asks: Sellers want the highest price, but the 'best' ask is the lowest price.
-    // std::less sorts lowest to highest.
     std::map<double, int, std::less<double>> asks;
 
 public:
-    // Add liquidity to the buy side
     void addBid(double price, int quantity) {
+        if (quantity <= 0) return;
         bids[price] += quantity;
     }
 
-    // Add liquidity to the sell side
     void addAsk(double price, int quantity) {
+        if (quantity <= 0) return;
         asks[price] += quantity;
+    }
+
+    void modifyBid(double price, int quantity) {
+        if (quantity <= 0) {
+            cancelBid(price);
+        } else {
+            bids[price] = quantity;
+        }
+    }
+
+    void modifyAsk(double price, int quantity) {
+        if (quantity <= 0) {
+            cancelAsk(price);
+        } else {
+            asks[price] = quantity;
+        }
+    }
+
+    void cancelBid(double price) {
+        bids.erase(price);
+    }
+
+    void cancelAsk(double price) {
+        asks.erase(price);
+    }
+
+    bool hasBids() const {
+        return !bids.empty();
+    }
+
+    bool hasAsks() const {
+        return !asks.empty();
     }
 
     double getBestBid() const {
         if (bids.empty()) return 0.0;
-        return bids.begin()->first; // The top of the greater-sorted map
+        return bids.begin()->first;
+    }
+
+    int getBestBidQty() const {
+        if (bids.empty()) return 0;
+        return bids.begin()->second;
     }
 
     double getBestAsk() const {
         if (asks.empty()) return 0.0;
-        return asks.begin()->first; // The top of the less-sorted map
+        return asks.begin()->first;
     }
 
-    // This is the critical number we will feed to our Black-Scholes model
+    int getBestAskQty() const {
+        if (asks.empty()) return 0;
+        return asks.begin()->second;
+    }
+
+    double getSpread() const {
+        if (bids.empty() || asks.empty()) return 0.0;
+        return getBestAsk() - getBestBid();
+    }
+
     double getMidPrice() const {
         if (bids.empty() || asks.empty()) {
             throw std::runtime_error("Cannot calculate mid-price: Book is empty on one side.");
         }
         return (getBestBid() + getBestAsk()) / 2.0;
+    }
+
+    // Micro-price weighted by top-of-book volume:
+    // P_micro = (Q_bid * P_ask + Q_ask * P_bid) / (Q_bid + Q_ask)
+    double getMicroPrice() const {
+        if (bids.empty() || asks.empty()) {
+            throw std::runtime_error("Cannot calculate micro-price: Book is empty on one side.");
+        }
+        double bestBid = getBestBid();
+        double bestAsk = getBestAsk();
+        int bidQty = getBestBidQty();
+        int askQty = getBestAskQty();
+
+        int totalQty = bidQty + askQty;
+        if (totalQty == 0) return (bestBid + bestAsk) / 2.0;
+
+        return (static_cast<double>(bidQty) * bestAsk + static_cast<double>(askQty) * bestBid) / totalQty;
+    }
+
+    // Order Book Imbalance (OBI) at top of book, bounded in [-1.0, 1.0]
+    // OBI > 0 implies buying pressure; OBI < 0 implies selling pressure.
+    double getOrderBookImbalance() const {
+        if (bids.empty() || asks.empty()) return 0.0;
+        int bidQty = getBestBidQty();
+        int askQty = getBestAskQty();
+        int totalQty = bidQty + askQty;
+        if (totalQty == 0) return 0.0;
+
+        return static_cast<double>(bidQty - askQty) / totalQty;
     }
 };
 

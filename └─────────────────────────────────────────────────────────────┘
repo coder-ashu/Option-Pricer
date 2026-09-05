@@ -19,7 +19,7 @@
   - Implement a fast Implied Volatility (IV) solver using Newton-Raphson or Halley's method to invert option market prices into real-time volatility estimates.
 
 ### 3.3. Inventory-Aware Quoting (Market Making)
-- Instead of static symmetric edges (`theo ± edge`), implement an inventory-adjusted mid:
+- Instead of static symmetric edges (`theo +/- edge`), implement an inventory-adjusted mid:
   $$r(s, q) = s - q \cdot \gamma \cdot \sigma^2$$
   where:
   - $s$ is the micro-price or theoretical mid price,
