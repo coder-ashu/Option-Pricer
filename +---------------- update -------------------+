@@ -1,0 +1,40 @@
+
+### 4.1 Fast Path (Underlying Ingestion & Quoting)
+- Written in lock-free C++ (single-threaded or pinned core using cache-line aligned shared data).
+- Receives spot updates, applies current cached Greeks via Taylor expansion, checks inventory skew, and fires outbound quotes.
+- Target latency: 1–25 microseconds per tick.
+
+### 4.2 Slow Path (Calibration & Volatility Surface)
+- Runs asynchronously on worker threads (e.g., every 500ms–5s, or when significant market events occur).
+- Solves implied volatilities via Newton-Raphson / Halley's method for all strikes in the chain.
+- Fits the SVI/SABR parameters and updates Greek values in double-buffered or RCU (Read-Copy-Update) structures consumed by the fast loop.
+
+---
+
+## 5. Engineering & C++ Performance Optimizations
+
+1. **Replace Node-Based Containers:**
+   - Replace `std::map<double, int>` in `OrderBook` with fixed-capacity arrays, flat vectors (`boost::container::flat_map`), or B-trees. Node allocations incur cache misses on the hot path.
+2. **Fixed-Point Arithmetic for Prices:**
+   - Avoid floating-point imprecision and non-deterministic branch behavior by representing tick prices and quote prices as integer ticks (e.g., integer multiples of 0.01).
+3. **Approximations for Cumulative Normal Distribution:**
+   - Replace standard library `std::erfc` with high-accuracy polynomial or rational approximations (e.g., Hart, Cody, or Abramowitz-Stegun) or AVX2/AVX-512 SIMD vectorization across strike chains.
+4. **Zero Dynamic Allocations on Tick Ingestion:**
+   - Pre-allocate order book buffers, tick queues, and option chain arrays at startup. Zero runtime `malloc`/`free` calls during the market session.
+
+---
+
+## 6. Implementation Milestones
+
+1. **Phase 1: Analytics & Risk Core**
+   - Add analytical Greeks (Delta, Gamma, Vega, Theta, Rho) to the Black-Scholes engine.
+   - Implement Newton-Raphson Implied Volatility solver.
+2. **Phase 2: Microstructure & OrderBook Optimization**
+   - Implement volume-weighted micro-price and top-of-book depth tracking.
+   - Transition `OrderBook` from `std::map` to contiguous array/vector layout.
+3. **Phase 3: Real-Time Taylor Repricing Engine**
+   - Implement fast-path tick evaluator using pre-calculated Greeks.
+   - Integrate Avellaneda-Stoikov inventory skewing into quote generation.
+4. **Phase 4: Two-Speed Async Architecture**
+   - Introduce lock-free ring buffers between market data feed, surface calibrator, and quoting engine.
+   - Implement SVI or SABR parametric surface calibration.
