@@ -4,7 +4,7 @@
 options-pricer/
 ├── CMakeLists.txt              # [MODIFIED] Link Boost (Asio/Beast), OpenSSL, & Threads
 ├── config/
-│   └── polygon_config.json     # [MODIFIED] API Key, WebSocket endpoint, target symbols
+│   └── paper_config.json     # [MODIFIED] API Key, WebSocket endpoint, target symbols
 ├── external/
 │   └── nlohmann/               # [NEW] Header-only JSON parser (nlohmann/json.hpp)
 ├── include/
