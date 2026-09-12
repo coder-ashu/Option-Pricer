@@ -1,0 +1,15 @@
+{
+  "polygon": {
+    "host": "test.deribit.com",
+    "port": "443",
+    "endpoint": "/ws/api/v2",
+    "target_symbol": "ticker.BTC-27MAR26-60000-C.100ms"
+  },
+  "risk_limits": {
+    "max_delta_threshold": 1.5,
+    "max_order_quantity": 1
+  },
+  "simulation": {
+    "initial_cash": 100000.0
+  }
+}

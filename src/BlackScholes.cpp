@@ -86,7 +86,7 @@ Greeks BlackScholes::calculatePutGreeks(double S, double K, double T, double r, 
     double discount = std::exp(-r * T);
 
     g.price = K * discount * n_minus_d2 - S * n_minus_d1;
-    g.delta = nd1() - 1.0;
+    // g.delta = nd1 - 1.0;
     g.delta = n_minus_d1 - 1.0; // standard put delta = N(d1) - 1
     g.gamma = npd1 / (S * v * sqrtT);
     g.vega = S * npd1 * sqrtT * 0.01;

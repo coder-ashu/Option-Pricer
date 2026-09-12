@@ -1,27 +1,29 @@
-#This is the  1st version of the project , optimisations would follow 
+# this is v0
 
 
 options-pricer/
-├── CMakeLists.txt              # [MODIFIED] Link against IBKR TwsApi library
+├── CMakeLists.txt              # [MODIFIED] Link Boost (Asio/Beast), OpenSSL, & Threads
 ├── config/
-│   └── paper_config.json       # [NEW] Socket ports, contract symbols, risk limits
+│   └── polygon_config.json     # [MODIFIED] API Key, WebSocket endpoint, target symbols
+├── external/
+│   └── nlohmann/               # [NEW] Header-only JSON parser (nlohmann/json.hpp)
 ├── include/
 │   ├── BlackScholes.hpp        # Unchanged (Pure math core)
-│   ├── OrderBook.hpp          # [MODIFIED] Support streaming bid/ask updates
-│   ├── MarketData.hpp          # [MODIFIED] Refactor into abstract IMarketDataProvider
-│   ├── IBMarketData.hpp        # [NEW] Real-time tick stream from IBKR
-│   ├── IBExecutionHandler.hpp  # [NEW] Inherits EWrapper/EClientSocket for API calls
-│   ├── RiskManager.hpp         # [NEW] Aggregates Net Delta/Gamma & enforces Kill Switches
-│   ├── LockFreeQueue.hpp       # [NEW] SPSC Queue to pass ticks from API to engine
-│   └── Engine.hpp              # [MODIFIED] Event loop consuming lock-free thread queue
+│   ├── OrderBook.hpp           # [MODIFIED] Support Polygon JSON Quote/Trade updates
+│   ├── MarketData.hpp          # Abstract Interface (IMarketDataProvider)
+│   ├── PolygonMarketData.hpp   # [REPLACED IBMarketData] Boost.Beast WebSocket client
+│   ├── SimulatedBroker.hpp     # [REPLACED IBExecutionHandler] Local paper trading OMS
+│   ├── RiskManager.hpp         # [MODIFIED] Tracks paper positions & delta hedging limits
+│   ├── LockFreeQueue.hpp       # Unchanged (SPSC Queue passing JSON strings to Engine)
+│   └── Engine.hpp              # [MODIFIED] Multi-threaded JSON parser & strategy loop
 ├── src/
 │   ├── OrderBook.cpp
 │   ├── BlackScholes.cpp
 │   ├── MarketData.cpp
-│   ├── IBMarketData.cpp        # [NEW] IBKR tick parser
-│   ├── IBExecutionHandler.cpp  # [NEW] EWrapper callback implementation
-│   ├── RiskManager.cpp         # [NEW] Hedging logic & fat-finger filters
-│   ├── Engine.cpp              # [MODIFIED] Multi-threaded processing loop
-│   └── main.cpp                # [MODIFIED] App entry point, signal handler, thread init
+│   ├── PolygonMarketData.cpp   # [NEW] Connection, Auth, and Subscriptions over SSL WSS
+│   ├── SimulatedBroker.cpp     # [NEW] Paper order execution, mid-price fills, P&L
+│   ├── RiskManager.cpp         # Risk limits & position tracking
+│   ├── Engine.cpp              # Consumes SPSC queue, updates math, triggers paper orders
+│   └── main.cpp                # App entry point, signal handler, thread init
 └── data/
     └── historical_ticks.csv    # Kept for offline regression testing
