@@ -85,13 +85,17 @@ void DeribitDataFetcher::run_wss_loop() {
         ws.next_layer().handshake(ssl::stream_base::client);
         ws.handshake(host_, "/ws/api/v2");
 
-        // Subscribe to L3 / Raw book channel
-        std::string channel = "book." + instrument_ + ".raw";
+        // Build JSON-RPC channels array
+        json channels = json::array();
+        for (const auto& symbol : instruments_) {
+            channels.push_back("book." + symbol + ".raw");
+        }
+
         json sub_request = {
             {"jsonrpc", "2.0"},
             {"id", 42},
             {"method", "public/subscribe"},
-            {"params", {{"channels", json::array({channel})}}}
+            {"params", {{"channels", channels}}} // Batch subscribe to all 10 symbols!
         };
 
         ws.write(net::buffer(sub_request.dump()));

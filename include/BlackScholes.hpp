@@ -22,6 +22,9 @@ public:
     static double impliedVolatilityCall(double marketPrice, double S, double K, double T, double r,
                                        double initialVol = 0.20, double tol = 1e-5, int maxIter = 100);
 
+    static double impliedVolatilityPut(double marketPrice, double S, double K, double T, double r,
+                                   double initialVol = 0.20, double tol = 1e-5, int maxIter = 100);
+
     static double norm_pdf(double x);
     static double norm_cdf(double x);
 };

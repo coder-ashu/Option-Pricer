@@ -22,6 +22,7 @@ struct BookOrderDelta {
 
 template<size_t MaxDeltas = 64>
 struct L3BookUpdateEvent {
+    char symbol[32]{0}; // e.g. "BTC-27SEP26-60000-C"
     uint64_t timestamp{0};
     uint64_t change_id{0};
     size_t delta_count{0};
@@ -40,8 +41,9 @@ class DeribitDataFetcher {
 private:
     std::string host_;
     std::string port_;
-    std::string instrument_;
+    std::vector<std::string> instruments_;
     L3Queue& queue_;
+
 
     // --- Extracted Option Info ---
     std::string expiry_date_;  // e.g. "27SEP26"

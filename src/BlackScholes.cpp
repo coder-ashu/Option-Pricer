@@ -119,3 +119,31 @@ double BlackScholes::impliedVolatilityCall(double marketPrice, double S, double 
 
     return vol;
 }
+
+double BlackScholes::impliedVolatilityPut(double marketPrice, double S, double K, double T, double r,
+                                          double initialVol, double tol, int maxIter) {
+    if (T <= 0.0 || marketPrice <= std::max(0.0, K - S)) return 0.0;
+
+    double vol = initialVol;
+    double sqrtT = std::sqrt(T);
+
+    for (int i = 0; i < maxIter; ++i) {
+        double d1 = (std::log(S / K) + (r + 0.5 * vol * vol) * T) / (vol * sqrtT);
+        double d2 = d1 - vol * sqrtT;
+        
+        // Put Price
+        double price = K * std::exp(-r * T) * norm_cdf(-d2) - S * norm_cdf(-d1);
+        double diff = price - marketPrice;
+
+        if (std::abs(diff) < tol) return vol;
+
+        // Vega is identical for Calls and Puts
+        double vega = S * norm_pdf(d1) * sqrtT;
+        if (vega < 1e-12) break;
+
+        vol -= diff / vega;
+        if (vol <= 1e-4) vol = 1e-4;
+    }
+
+    return vol;
+}

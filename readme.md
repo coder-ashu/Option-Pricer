@@ -53,3 +53,39 @@ options-pricer/
 │  Strategy Engine       │
 │  (Consumer Thread)     │  Processes book deltas for market making
 └────────────────────────┘
+
+
+
+# System Architecture
+
+┌─────────────────┐
+│ Python Script   │ fetches active options
+│ (REST API)      │ ───> symbols.json (Loaded at startup)
+└─────────────────┘
+
+      [ NETWORK INGESTION / PRODUCER THREADS ]
+┌─────────────────────────┐       ┌─────────────────────────┐
+│ SpotPriceFetcher        │       │ DeribitDataFetcher      │
+│ (Thread 1)              │       │ (Thread 2)              │
+│ Sub: ticker.BTC-PERP    │       │ Sub: book.<options>.raw │
+└───────────┬─────────────┘       └───────────┬─────────────┘
+            │                                 │
+            │ std::atomic store               │ lock-free emplace()
+            ▼                                 ▼
+┌─────────────────────────┐       ┌─────────────────────────┐
+│ std::atomic<double>     │       │ L3Queue (SPSC Ring)     │
+│ underlying_spot_price_  │       │ 10,240 Event Capacity   │
+└───────────┬─────────────┘       └───────────┬─────────────┘
+            │                                 │
+            │ std::atomic load                │ lock-free pop()
+            ▼                                 ▼
+      [ PRICING & LOGIC / CONSUMER THREAD ]
+┌───────────────────────────────────────────────────────────┐
+│ TradingEngine (Thread 3)                                  │
+│                                                           │
+│ 1. Routing: Updates specific symbol's OrderBook.          │
+│ 2. State: Extracts Option Mid-Price from OrderBook.       │
+│ 3. State: Reads underlying_spot_price_ (Lock-free).       │
+│ 4. Compute: Newton-Raphson IV Solver (Warm Started).      │
+│ 5. Compute: Black-Scholes Greeks (Delta, Gamma, Vega).    │
+└───────────────────────────────────────────────────────────┘
