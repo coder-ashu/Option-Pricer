@@ -44,11 +44,6 @@ target_link_libraries(data_test PRIVATE ${NET_LIBRARIES})
 set(ENGINE_SOURCES
     src/main.cpp
     src/BlackScholes.cpp
-    src/MarketData.cpp
-    src/OrderBook.cpp
-    src/Engine.cpp
-    src/PolygonMarketData.cpp
-    src/SimulatedBroker.cpp
     src/FetchData.cpp
 )
 

@@ -15,6 +15,8 @@ double BlackScholes::norm_cdf(double x) {
 }
 
 double BlackScholes::calculateCallPrice(double S, double K, double T, double r, double v) {
+    if (!std::isfinite(S) || !std::isfinite(K) || !std::isfinite(T) || !std::isfinite(r) ||
+        !std::isfinite(v) || S <= 0.0 || K <= 0.0) return 0.0;
     if (T <= 0.0) return std::max(0.0, S - K);
     if (v <= 0.0) return std::max(0.0, S - K * std::exp(-r * T));
 
@@ -26,6 +28,8 @@ double BlackScholes::calculateCallPrice(double S, double K, double T, double r, 
 }
 
 double BlackScholes::calculatePutPrice(double S, double K, double T, double r, double v) {
+    if (!std::isfinite(S) || !std::isfinite(K) || !std::isfinite(T) || !std::isfinite(r) ||
+        !std::isfinite(v) || S <= 0.0 || K <= 0.0) return 0.0;
     if (T <= 0.0) return std::max(0.0, K - S);
     if (v <= 0.0) return std::max(0.0, K * std::exp(-r * T) - S);
 
@@ -87,7 +91,7 @@ Greeks BlackScholes::calculatePutGreeks(double S, double K, double T, double r, 
 
     g.price = K * discount * n_minus_d2 - S * n_minus_d1;
     // g.delta = nd1 - 1.0;
-    g.delta = n_minus_d1 - 1.0; // standard put delta = N(d1) - 1
+    g.delta = norm_cdf(d1) - 1.0;
     g.gamma = npd1 / (S * v * sqrtT);
     g.vega = S * npd1 * sqrtT * 0.01;
     g.theta = (-(S * npd1 * v) / (2.0 * sqrtT) + r * K * discount * n_minus_d2) / 365.0;
@@ -95,55 +99,47 @@ Greeks BlackScholes::calculatePutGreeks(double S, double K, double T, double r, 
     return g;
 }
 
+namespace {
+double solveImpliedVolatility(double marketPrice, double S, double K, double T, double r,
+                              double initialVol, bool isCall, double tol, int maxIter) {
+    if (!std::isfinite(marketPrice) || !std::isfinite(S) || !std::isfinite(K) ||
+        !std::isfinite(T) || !std::isfinite(r) || S <= 0.0 || K <= 0.0 || T <= 0.0 ||
+        marketPrice < 0.0) return 0.0;
+
+    const double discount = std::exp(-r * T);
+    const double lowerBound = isCall ? std::max(0.0, S - K * discount)
+                                     : std::max(0.0, K * discount - S);
+    const double upperBound = isCall ? S : K * discount;
+    if (marketPrice < lowerBound - tol || marketPrice >= upperBound) return 0.0;
+    if (marketPrice <= lowerBound + tol) return 0.0; // zero volatility at the bound
+
+    auto priceAt = [&](double vol) {
+        return isCall ? BlackScholes::calculateCallPrice(S, K, T, r, vol)
+                      : BlackScholes::calculatePutPrice(S, K, T, r, vol);
+    };
+
+    double low = 1e-8;
+    double high = std::clamp(std::isfinite(initialVol) ? initialVol : 0.5, 0.01, 5.0);
+    while (priceAt(high) < marketPrice && high < 10.0) high = std::min(10.0, high * 2.0);
+    if (priceAt(high) < marketPrice) return 0.0;
+
+    for (int i = 0; i < std::max(1, maxIter); ++i) {
+        const double mid = (low + high) * 0.5;
+        const double modelPrice = priceAt(mid);
+        if (std::abs(modelPrice - marketPrice) <= tol) return mid;
+        if (modelPrice < marketPrice) low = mid;
+        else high = mid;
+    }
+    return (low + high) * 0.5;
+}
+}
+
 double BlackScholes::impliedVolatilityCall(double marketPrice, double S, double K, double T, double r,
                                            double initialVol, double tol, int maxIter) {
-    if (T <= 0.0 || marketPrice <= std::max(0.0, S - K)) return 0.0;
-
-    double vol = initialVol;
-    double sqrtT = std::sqrt(T);
-
-    for (int i = 0; i < maxIter; ++i) {
-        double d1 = (std::log(S / K) + (r + 0.5 * vol * vol) * T) / (vol * sqrtT);
-        double d2 = d1 - vol * sqrtT;
-        double price = S * norm_cdf(d1) - K * std::exp(-r * T) * norm_cdf(d2);
-        double diff = price - marketPrice;
-
-        if (std::abs(diff) < tol) return vol;
-
-        double vega = S * norm_pdf(d1) * sqrtT;
-        if (vega < 1e-12) break;
-
-        vol -= diff / vega;
-        if (vol <= 1e-4) vol = 1e-4;
-    }
-
-    return vol;
+    return solveImpliedVolatility(marketPrice, S, K, T, r, initialVol, true, tol, maxIter);
 }
 
 double BlackScholes::impliedVolatilityPut(double marketPrice, double S, double K, double T, double r,
                                           double initialVol, double tol, int maxIter) {
-    if (T <= 0.0 || marketPrice <= std::max(0.0, K - S)) return 0.0;
-
-    double vol = initialVol;
-    double sqrtT = std::sqrt(T);
-
-    for (int i = 0; i < maxIter; ++i) {
-        double d1 = (std::log(S / K) + (r + 0.5 * vol * vol) * T) / (vol * sqrtT);
-        double d2 = d1 - vol * sqrtT;
-        
-        // Put Price
-        double price = K * std::exp(-r * T) * norm_cdf(-d2) - S * norm_cdf(-d1);
-        double diff = price - marketPrice;
-
-        if (std::abs(diff) < tol) return vol;
-
-        // Vega is identical for Calls and Puts
-        double vega = S * norm_pdf(d1) * sqrtT;
-        if (vega < 1e-12) break;
-
-        vol -= diff / vega;
-        if (vol <= 1e-4) vol = 1e-4;
-    }
-
-    return vol;
+    return solveImpliedVolatility(marketPrice, S, K, T, r, initialVol, false, tol, maxIter);
 }

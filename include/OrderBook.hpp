@@ -2,26 +2,26 @@
 #define ORDERBOOK_HPP
 
 #include <map>
-#include <stdexcept>
 #include <cmath>
+#include <stdexcept>
 
 class OrderBook {
 private:
-    std::map<double, int, std::greater<double>> bids;
-    std::map<double, int, std::less<double>> asks;
+    std::map<double, double, std::greater<double>> bids;
+    std::map<double, double, std::less<double>> asks;
 
 public:
-    void addBid(double price, int quantity) {
-        if (quantity <= 0) return;
+    void addBid(double price, double quantity) {
+        if (!std::isfinite(price) || !std::isfinite(quantity) || price <= 0.0 || quantity <= 0.0) return;
         bids[price] += quantity;
     }
 
-    void addAsk(double price, int quantity) {
-        if (quantity <= 0) return;
+    void addAsk(double price, double quantity) {
+        if (!std::isfinite(price) || !std::isfinite(quantity) || price <= 0.0 || quantity <= 0.0) return;
         asks[price] += quantity;
     }
 
-    void modifyBid(double price, int quantity) {
+    void modifyBid(double price, double quantity) {
         if (quantity <= 0) {
             cancelBid(price);
         } else {
@@ -29,7 +29,7 @@ public:
         }
     }
 
-    void modifyAsk(double price, int quantity) {
+    void modifyAsk(double price, double quantity) {
         if (quantity <= 0) {
             cancelAsk(price);
         } else {
@@ -45,6 +45,11 @@ public:
         asks.erase(price);
     }
 
+    void clear() {
+        bids.clear();
+        asks.clear();
+    }
+
     bool hasBids() const {
         return !bids.empty();
     }
@@ -58,7 +63,7 @@ public:
         return bids.begin()->first;
     }
 
-    int getBestBidQty() const {
+    double getBestBidQty() const {
         if (bids.empty()) return 0;
         return bids.begin()->second;
     }
@@ -68,7 +73,7 @@ public:
         return asks.begin()->first;
     }
 
-    int getBestAskQty() const {
+    double getBestAskQty() const {
         if (asks.empty()) return 0;
         return asks.begin()->second;
     }
@@ -93,10 +98,10 @@ public:
         }
         double bestBid = getBestBid();
         double bestAsk = getBestAsk();
-        int bidQty = getBestBidQty();
-        int askQty = getBestAskQty();
+        double bidQty = getBestBidQty();
+        double askQty = getBestAskQty();
 
-        int totalQty = bidQty + askQty;
+        double totalQty = bidQty + askQty;
         if (totalQty == 0) return (bestBid + bestAsk) / 2.0;
 
         return (static_cast<double>(bidQty) * bestAsk + static_cast<double>(askQty) * bestBid) / totalQty;
@@ -106,9 +111,9 @@ public:
     // OBI > 0 implies buying pressure; OBI < 0 implies selling pressure.
     double getOrderBookImbalance() const {
         if (bids.empty() || asks.empty()) return 0.0;
-        int bidQty = getBestBidQty();
-        int askQty = getBestAskQty();
-        int totalQty = bidQty + askQty;
+        double bidQty = getBestBidQty();
+        double askQty = getBestAskQty();
+        double totalQty = bidQty + askQty;
         if (totalQty == 0) return 0.0;
 
         return static_cast<double>(bidQty - askQty) / totalQty;
