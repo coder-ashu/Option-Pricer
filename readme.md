@@ -27,3 +27,29 @@ options-pricer/
 │   └── main.cpp                # App entry point, signal handler, thread init
 └── data/
     └── historical_ticks.csv    # Kept for offline regression testing
+
+
+
+# Data Parsing 
+
+┌────────────────────────┐
+│  Deribit Exchange      │
+└───────────┬────────────┘
+            │  WSS Payload (JSON over SSL)
+            ▼
+┌────────────────────────┐
+│  DeribitDataFetcher    │  1. Boost.Beast receives WebSocket frame
+│  (Worker Thread)       │  2. nlohmann::json parses array triples
+└───────────┬────────────┘  3. Constructs stack L3BookUpdateEvent
+            │
+            │ queue_.emplace(event) [Lock-Free, zero-alloc]
+            ▼
+┌────────────────────────┐
+│  SPSCQueue             │  Ring Buffer (Capacity 10,240)
+└───────────┬────────────┘
+            │ queue_.pop(event)
+            ▼
+┌────────────────────────┐
+│  Strategy Engine       │
+│  (Consumer Thread)     │  Processes book deltas for market making
+└────────────────────────┘

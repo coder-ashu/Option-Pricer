@@ -35,7 +35,7 @@ set(NET_LIBRARIES
 # ---------------------------------------------------------
 # 4. Target 1: Standalone Data Test Executable
 # ---------------------------------------------------------
-add_executable(data_test src/data_test.cpp)
+add_executable(data_test  src/data_test.cpp src/FetchData.cpp)
 target_link_libraries(data_test PRIVATE ${NET_LIBRARIES})
 
 # ---------------------------------------------------------
@@ -49,6 +49,7 @@ set(ENGINE_SOURCES
     src/Engine.cpp
     src/PolygonMarketData.cpp
     src/SimulatedBroker.cpp
+    src/FetchData.cpp
 )
 
 add_executable(option_pricer ${ENGINE_SOURCES})
