@@ -10,11 +10,29 @@ EXPIRED = "false"
 MAX_SYMBOLS = 10
 
 
-OUTPUT_DIR = r"../config"  # Destination folder
+OUTPUT_DIR = r"./config"  # Destination folder
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "symbols.json")
 
 
 def fetch_deribit_symbols():
+    summary_url = f"https://test.deribit.com/api/v2/public/get_book_summary_by_currency?currency={CURRENCY}&kind={KIND}"
+    try:
+        req = urllib.request.Request(summary_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+            if "result" in data and data["result"]:
+                # Select options that have active bids and asks, sorted by volume
+                active = [
+                    item for item in data["result"]
+                    if item.get("bid_price") and item.get("ask_price")
+                ]
+                active.sort(key=lambda x: x.get("volume", 0), reverse=True)
+                if active:
+                    return [item["instrument_name"] for item in active[:MAX_SYMBOLS]]
+    except urllib.error.URLError as e:
+        print(f"[WARN] Failed to fetch book summary: {e}, falling back to get_instruments")
+
+    # Fallback to get_instruments
     url = f"{BASE_URL}?currency={CURRENCY}&kind={KIND}&expired={EXPIRED}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})

@@ -85,7 +85,7 @@ private:
                     const double spot = data["mark_price"].get<double>();
                     engine_.set_underlying_spot(spot);
                     std::cout << "[SPOT TICK] " << instrument_ << " Spot Price Updated: $"
-                              << std::fixed << std::setprecision(2) << spot << "\n";
+                             << std::fixed << std::setprecision(2) << spot << "\n";
                 } else if (data.contains("last_price") && data["last_price"].is_number()) {
                     const double spot = data["last_price"].get<double>();
                     engine_.set_underlying_spot(spot);

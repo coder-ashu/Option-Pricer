@@ -61,7 +61,11 @@ void DeribitDataFetcher::run_wss_loop() {
         // 1. Construct JSON-RPC batch channel array for all instruments
         json channels = json::array();
         for (const auto& symbol : instruments_) {
-            channels.push_back("book." + symbol + ".none.20.100ms");
+            if (symbol.rfind("book.", 0) == 0) {
+                channels.push_back(symbol);
+            } else {
+                channels.push_back("book." + symbol + ".100ms");
+            }
         }
     
         json sub_request = {
@@ -107,11 +111,11 @@ void DeribitDataFetcher::run_wss_loop() {
             if (!params.contains("data") || !params["data"].is_object()) continue;
             const auto& data = params["data"];
 
-            // --- FIXED STRING EXTRACTION LOGIC ---
+            // Extract symbol from channel or data
             std::string symbol = "";
             if (channel_name.rfind("book.", 0) == 0) {
                 size_t start = 5; // length of "book."
-                size_t end = channel_name.find(".none.");
+                size_t end = channel_name.find('.', start);
                 if (end != std::string::npos && end > start) {
                     symbol = channel_name.substr(start, end - start);
                 }
@@ -120,65 +124,103 @@ void DeribitDataFetcher::run_wss_loop() {
                 symbol = data.value("instrument_name", "");
             }
 
-            // --- FIXED BUFFER OVERFLOW & MEMORY SAFETY ---
             if (symbol.empty() || symbol.size() >= 32) {
-                // Drop if symbol is empty or too large for the 32-byte char array
                 continue;
             }
 
             L3BookUpdateEvent<64> event{};
-            std::memset(event.symbol, 0, sizeof(event.symbol)); // Zero out memory
-            std::strncpy(event.symbol, symbol.c_str(), sizeof(event.symbol) - 1); // Safe copy
+            std::memset(event.symbol, 0, sizeof(event.symbol));
+            std::strncpy(event.symbol, symbol.c_str(), sizeof(event.symbol) - 1);
             
             event.timestamp = data.value("timestamp", 0ULL);
             event.change_id = data.value("change_id", 0ULL);
 
-            std::string type = data.value("type", "change");
-            
-            // NOTE: Ensure your L3BookUpdateEvent struct in FetchData.hpp has the "bool is_snapshot;" member!
-            event.is_snapshot = (type == "snapshot");
-            BookAction default_action = event.is_snapshot ? BookAction::SNAPSHOT : BookAction::CHANGE;
+            std::string type = data.value("type", "");
+            bool is_snap = false;
+            if (type == "snapshot") {
+                is_snap = true;
+                first_update_reported.insert(symbol);
+            } else if (type == "change") {
+                is_snap = false;
+                first_update_reported.insert(symbol);
+            } else {
+                // If type field is not present, mark the first update as snapshot
+                if (first_update_reported.find(symbol) == first_update_reported.end()) {
+                    is_snap = true;
+                    first_update_reported.insert(symbol);
+                } else {
+                    is_snap = false;
+                }
+            }
+            event.is_snapshot = is_snap;
+
+            auto push_event = [&]() {
+                if (event.delta_count > 0 || event.is_snapshot) {
+                    while (!queue_.emplace(event) && is_running_) {
+                        #if defined(__x86_64__) || defined(_M_X64)
+                        _mm_pause();
+                        #endif
+                    }
+                    event.delta_count = 0;
+                    event.is_snapshot = false; // Only first chunk clears the book
+                }
+            };
 
             auto parse_side = [&](const json& entries, BookSide side) {
-            for (const auto& item : entries) {
-                // Public depth channels send [price, amount] (size 2)
-                if (!item.is_array() || item.size() < 2) continue;
-                
-                // Safely extract price and amount
-                double price = item[0].is_number() ? item[0].get<double>() : 0.0;
-                double amount = item[1].is_number() ? item[1].get<double>() : 0.0;
+                for (const auto& item : entries) {
+                    if (!item.is_array() || item.size() < 2) continue;
 
-                if (price <= 0.0) continue;
+                    BookAction act = BookAction::CHANGE;
+                    double price = 0.0;
+                    double amount = 0.0;
 
-                // In public depth channels, an amount of 0 means the price level was deleted.
-                BookAction act = BookAction::CHANGE;
-                if (amount == 0.0) {
-                    act = BookAction::DELETE;
-                } else if (event.is_snapshot) {
-                    act = BookAction::NEW;
+                    if (item.size() >= 3 && item[0].is_string()) {
+                        // Deribit order book delta format: [action, price, amount]
+                        // e.g. ["new", 0.0495, 10.0], ["change", 0.0495, 15.0], ["delete", 0.0495, 0.0]
+                        std::string action_str = item[0].get<std::string>();
+                        price = item[1].is_number() ? item[1].get<double>() : 0.0;
+                        amount = item[2].is_number() ? item[2].get<double>() : 0.0;
+
+                        if (action_str == "delete" || amount <= 0.0) {
+                            act = BookAction::DELETE;
+                        } else if (action_str == "new") {
+                            act = BookAction::NEW;
+                        } else {
+                            act = BookAction::CHANGE;
+                        }
+                    } else {
+                        // Deribit depth format: [price, amount]
+                        price = item[0].is_number() ? item[0].get<double>() : 0.0;
+                        amount = item[1].is_number() ? item[1].get<double>() : 0.0;
+
+                        if (amount <= 0.0) {
+                            act = BookAction::DELETE;
+                        } else if (event.is_snapshot) {
+                            act = BookAction::NEW;
+                        } else {
+                            act = BookAction::CHANGE;
+                        }
+                    }
+
+                    if (price <= 0.0) continue;
+
+                    if (!event.addDelta(act, side, price, amount)) {
+                        push_event();
+                        event.addDelta(act, side, price, amount);
+                    }
                 }
-
-                event.addDelta(act, side, price, amount);
-            }
-        };
+            };
 
             if (data.contains("bids")) parse_side(data["bids"], BookSide::BID);
             if (data.contains("asks")) parse_side(data["asks"], BookSide::ASK);
 
-            if (event.is_snapshot) {
+            if (is_snap) {
                 std::cout << "[BOOK SNAPSHOT] " << symbol << " bids="
                           << (data.contains("bids") ? data["bids"].size() : 0)
                           << " asks=" << (data.contains("asks") ? data["asks"].size() : 0) << "\n";
-            } else if (first_update_reported.insert(symbol).second) {
-                std::cout << "[BOOK STREAMING] First incremental update received for " << symbol << "\n";
             }
 
-            // Lock-free push to SPSC Ring Buffer
-            while (!queue_.emplace(event) && is_running_) {
-                #if defined(__x86_64__) || defined(_M_X64)
-                _mm_pause();
-                #endif
-            }
+            push_event();
         }
     } catch (const std::exception& e) {
         std::cerr << "[FETCHER ERROR]: " << e.what() << "\n";

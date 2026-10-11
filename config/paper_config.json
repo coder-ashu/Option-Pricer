@@ -3,7 +3,7 @@
     "host": "test.deribit.com",
     "port": "443",
     "endpoint": "/ws/api/v2",
-    "target_symbol": "ticker.BTC-27MAR26-60000-C.100ms"
+    "target_symbol": "ticker.BTC-11OCT26-60000-C.100ms"
   },
   "risk_limits": {
     "max_delta_threshold": 1.5,

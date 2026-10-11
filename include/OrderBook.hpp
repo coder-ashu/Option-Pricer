@@ -13,12 +13,12 @@ private:
 public:
     void addBid(double price, double quantity) {
         if (!std::isfinite(price) || !std::isfinite(quantity) || price <= 0.0 || quantity <= 0.0) return;
-        bids[price] += quantity;
+        bids[price] = quantity;
     }
 
     void addAsk(double price, double quantity) {
         if (!std::isfinite(price) || !std::isfinite(quantity) || price <= 0.0 || quantity <= 0.0) return;
-        asks[price] += quantity;
+        asks[price] = quantity;
     }
 
     void modifyBid(double price, double quantity) {

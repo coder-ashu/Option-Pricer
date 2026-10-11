@@ -85,6 +85,7 @@ private:
     }
 
     void run_consumer_loop() {
+        std::cout << "[ENGINE] Consumer loop started.\n";
         L3BookUpdateEvent<64> event;
 
         while (is_running_) {
@@ -93,22 +94,28 @@ private:
                 auto book_it = books_.find(symbol);
                 if (book_it == books_.end()) continue;
                 OrderBook& book = book_it->second;
-                if (event.is_snapshot) book.clear();
+                if (event.is_snapshot) {
+                    book.clear();
+                }
 
                 // Update Orderbook
                 for (size_t i = 0; i < event.delta_count; ++i) {
                     const auto& delta = event.deltas[i];
                     if (delta.side == BookSide::BID) {
-                        if (delta.action == BookAction::NEW) book.addBid(delta.price, delta.amount);
-                        else if (delta.action == BookAction::CHANGE) book.modifyBid(delta.price, delta.amount);
-                        else if (delta.action == BookAction::DELETE) book.cancelBid(delta.price);
+                        if (delta.action == BookAction::DELETE || delta.amount <= 0.0) {
+                            book.cancelBid(delta.price);
+                        } else {
+                            book.modifyBid(delta.price, delta.amount);
+                        }
                     } else {
-                        if (delta.action == BookAction::NEW) book.addAsk(delta.price, delta.amount);
-                        else if (delta.action == BookAction::CHANGE) book.modifyAsk(delta.price, delta.amount);
-                        else if (delta.action == BookAction::DELETE) book.cancelAsk(delta.price);
+                        if (delta.action == BookAction::DELETE || delta.amount <= 0.0) {
+                            book.cancelAsk(delta.price);
+                        } else {
+                            book.modifyAsk(delta.price, delta.amount);
+                        }
                     }
                 }
-
+               
                 // Pricing and Greeks Calculation
                 if (book.hasBids() && book.hasAsks()) {
                     try {
@@ -128,19 +135,28 @@ private:
                                 ? BlackScholes::impliedVolatilityCall(option_mid_price, S, meta.strike_price, meta.years_to_expiry, risk_free_rate_, initial_iv)
                                 : BlackScholes::impliedVolatilityPut(option_mid_price, S, meta.strike_price, meta.years_to_expiry, risk_free_rate_, initial_iv);
 
-                            current_ivs_[symbol] = implied_vol;
+                            if (implied_vol > 0.0) {
+                                current_ivs_[symbol] = implied_vol;
+                            } else {
+                                implied_vol = initial_iv;
+                            }
 
                             // Calculate Greeks
                             Greeks greeks = meta.is_call 
                                 ? BlackScholes::calculateCallGreeks(S, meta.strike_price, meta.years_to_expiry, risk_free_rate_, implied_vol)
                                 : BlackScholes::calculatePutGreeks(S, meta.strike_price, meta.years_to_expiry, risk_free_rate_, implied_vol);
 
-                            std::cout << std::fixed << std::setprecision(2)
+                            double spread_btc = book.getSpread();
+                            double spread_usd = spread_btc * spot;
+
+                            std::cout << std::fixed
                                       << "[" << symbol << "] "
-                                      << "OptMid: " << option_mid_quote << " BTC ($" << option_mid_price << ")"
-                                      << " | IV: " << (implied_vol * 100.0) << "%"
+                                      << "OptMid: " << std::setprecision(4) << option_mid_quote << " BTC ($" << std::setprecision(2) << option_mid_price << ")"
+                                      << " | IV: " << std::setprecision(2) << (implied_vol * 100.0) << "%"
                                       << " | Delta: " << std::setprecision(4) << greeks.delta 
-                                      << " | Spread: $" << std::setprecision(2) << book.getSpread() << "\n";
+                                      << " | Gamma: " << std::setprecision(6) << greeks.gamma
+                                      << " | Vega: " << std::setprecision(2) << greeks.vega
+                                      << " | Spread: " << std::setprecision(4) << spread_btc << " BTC ($" << std::setprecision(2) << spread_usd << ")\n";
                         } else if (pricing_wait_reported_.insert(symbol).second) {
                             std::cout << "[PRICING WAIT] " << symbol << ": ";
                             if (!meta.is_option || meta.strike_price <= 0.0) {
@@ -174,6 +190,8 @@ public:
     ~TradingEngine() { stop(); }
 
     void start() {
+
+        std::cout<<"start is running\n";
         is_running_ = true;
         consumer_thread_ = std::thread(&TradingEngine::run_consumer_loop, this);
     }
